@@ -600,18 +600,53 @@ function renderReddit(posts){
       el("span",{}, fmtTime(new Date(p.created_utc*1000)))))));
 }
 
+// Commerce-news terms, queried strictly against titles with typo-tolerance off
+// and a minimum-points gate so we don't get 1-point noise or "Spotify → Shopify"
+// fuzzy mismatches. Multiple queries run in parallel and merge.
+const HN_TERMS = ["shopify", "dropshipping", "ecommerce", "tiktok shop", "amazon seller", "woocommerce", "DTC brand", "Etsy"];
 async function fetchHN(){
-  try{ const r = await fetch("https://hn.algolia.com/api/v1/search_by_date?query=shopify%20OR%20dropshipping%20OR%20ecommerce%20OR%20%22tiktok%20shop%22&tags=story&hitsPerPage=10"); const j = await r.json(); return j.hits||[]; } catch(e){ return []; }
+  const base = "https://hn.algolia.com/api/v1/search";
+  const params = q => `?query=${encodeURIComponent(q)}&tags=story&hitsPerPage=6&restrictSearchableAttributes=title&typoTolerance=false&numericFilters=points%3E8`;
+  const queries = HN_TERMS.map(t => fetch(base + params(t)).then(r => r.ok ? r.json() : null).catch(()=>null));
+  const results = await Promise.allSettled(queries);
+  const seen = new Set();
+  const all = [];
+  results.forEach(r => {
+    if(r.status !== "fulfilled" || !r.value?.hits) return;
+    for(const h of r.value.hits){
+      if(!h.title || seen.has(h.objectID)) continue;
+      seen.add(h.objectID);
+      all.push(h);
+    }
+  });
+  // Quality-rank: points weighted by recency (half-life ~60 days).
+  const now = Date.now();
+  all.forEach(h => {
+    const ageDays = h.created_at_i ? (now/1000 - h.created_at_i) / 86400 : 365;
+    h._score = (h.points || 0) * Math.pow(0.5, ageDays/60) + (h.num_comments || 0) * 0.3;
+  });
+  all.sort((a,b) => b._score - a._score);
+  return all.slice(0, 12);
 }
 function renderHN(hits){
   const w = $("#hn-feed"); w.innerHTML="";
-  if(!hits.length){ w.appendChild(el("div",{class:"feed-item"}, el("div",{class:"feed-title"}, "HN feed unavailable"))); return; }
-  hits.slice(0,8).forEach(h => w.appendChild(el("a",{class:"feed-item", href:h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, target:"_blank", rel:"noopener noreferrer"},
-    el("div",{class:"feed-title"}, h.title || "(untitled)"),
-    el("div",{class:"feed-meta"},
-      el("span",{class:"chip"}, "HN"),
-      el("span",{}, `▲ ${h.points||0}`), el("span",{}, `💬 ${h.num_comments||0}`),
-      h.created_at ? el("span",{}, fmtTime(new Date(h.created_at))) : null))));
+  if(!hits.length){
+    w.appendChild(el("div",{class:"feed-item"},
+      el("div",{class:"feed-title"}, "Commerce news unavailable"),
+      el("div",{class:"feed-meta"}, el("span",{}, "HN API may be rate-limiting — try Refresh."))));
+    return;
+  }
+  hits.slice(0,8).forEach(h => {
+    const href = h.url || `https://news.ycombinator.com/item?id=${h.objectID}`;
+    const host = h.url ? new URL(h.url).hostname.replace(/^www\./,"") : "news.ycombinator.com";
+    w.appendChild(el("a",{class:"feed-item", href, target:"_blank", rel:"noopener noreferrer"},
+      el("div",{class:"feed-title"}, h.title),
+      el("div",{class:"feed-meta"},
+        el("span",{class:"chip"}, host.length>24 ? host.slice(0,22)+"…" : host),
+        el("span",{}, `▲ ${h.points||0}`),
+        el("span",{}, `💬 ${h.num_comments||0}`),
+        h.created_at ? el("span",{}, fmtTime(new Date(h.created_at))) : null)));
+  });
 }
 
 async function fetchPH(){
