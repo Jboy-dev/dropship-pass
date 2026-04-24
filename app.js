@@ -1,383 +1,584 @@
-// Dropship Pass — app logic
-// Renders curated catalog, pulls live public signals on load and on refresh.
-
-const DATA = window.DROPSHIP_DATA;
-
-// ---------- helpers ----------
-const $ = (sel, root=document) => root.querySelector(sel);
-const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
-const el = (tag, props={}, ...children) => {
-  const n = document.createElement(tag);
+// Dropship Pass — expanded app logic
+const D = window.DROPSHIP_DATA;
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const el = (tag, props={}, ...children)=>{
+  const n=document.createElement(tag);
   Object.entries(props).forEach(([k,v])=>{
-    if(k==="class") n.className = v;
-    else if(k==="html") n.innerHTML = v;
-    else if(k.startsWith("on")) n.addEventListener(k.slice(2).toLowerCase(), v);
-    else n.setAttribute(k, v);
+    if(k==="class") n.className=v;
+    else if(k==="html") n.innerHTML=v;
+    else if(k.startsWith("on")) n.addEventListener(k.slice(2).toLowerCase(),v);
+    else n.setAttribute(k,v);
   });
-  for(const c of children){
-    if(c==null) continue;
-    n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-  }
+  for(const c of children){ if(c==null) continue; n.appendChild(typeof c==="string"?document.createTextNode(c):c); }
   return n;
 };
-const fmtTime = (d)=> {
-  const diff = (Date.now() - d.getTime())/1000;
-  if(diff<60) return `${Math.round(diff)}s ago`;
-  if(diff<3600) return `${Math.round(diff/60)}m ago`;
-  if(diff<86400) return `${Math.round(diff/3600)}h ago`;
-  return `${Math.round(diff/86400)}d ago`;
-};
+const fmtTime = d=>{const s=(Date.now()-d.getTime())/1000;if(s<60)return `${Math.round(s)}s ago`;if(s<3600)return `${Math.round(s/60)}m ago`;if(s<86400)return `${Math.round(s/3600)}h ago`;return `${Math.round(s/86400)}d ago`};
+const usd = n=>"$"+Number(n).toLocaleString(undefined,{maximumFractionDigits:2});
+const pct = n=>`${(n*100).toFixed(1)}%`;
 
-// ---------- hero kpis ----------
+// ---------- favorites (localStorage) ----------
+const FAV_KEY = "dropship.favs.v1";
+const getFavs = ()=>{ try{return JSON.parse(localStorage.getItem(FAV_KEY)||"[]")}catch(e){return[]} };
+const setFavs = favs => localStorage.setItem(FAV_KEY, JSON.stringify(favs));
+const toggleFav = id => { const favs=getFavs(); const i=favs.indexOf(id); if(i>=0) favs.splice(i,1); else favs.push(id); setFavs(favs); return favs.includes(id); };
+const isFav = id => getFavs().includes(id);
+
+// ---------- toast ----------
+let toastTimer;
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2200); }
+
+// ---------- KPIs ----------
 function renderKpis(){
-  $("#kpi-products").textContent = DATA.products.length;
-  $("#kpi-platforms").textContent = DATA.platforms.length;
-  $("#kpi-channels").textContent = DATA.ads.length;
-  $("#kpi-audiences").textContent = DATA.audiences.length;
+  $("#kpi-products").textContent = D.products.length;
+  $("#kpi-platforms").textContent = D.platforms.length;
+  $("#kpi-channels").textContent = D.ads.length;
+  $("#kpi-audiences").textContent = D.audiences.length;
+  $("#kpi-templates").textContent = D.adTemplates.length;
+  $("#kpi-scripts").textContent = D.creativeScripts.length;
+  animateNumbers();
+}
+function animateNumbers(){
+  $$(".kpi-num").forEach(n=>{
+    const target = parseInt(n.textContent,10); if(isNaN(target)) return;
+    let cur=0; const step=Math.max(1,Math.ceil(target/30));
+    const iv=setInterval(()=>{ cur+=step; if(cur>=target){cur=target;clearInterval(iv)} n.textContent=cur; },30);
+  });
+}
+
+// ---------- daily featured pick ----------
+function renderDaily(){
+  const day = Math.floor(Date.now()/86400000);
+  const p = D.products[day % D.products.length];
+  $("#daily-date").textContent = new Date().toLocaleDateString(undefined,{month:"short",day:"numeric"});
+  const body = $("#daily-body"); body.innerHTML="";
+  body.className = "daily-body";
+  body.appendChild(el("div",{style:"font-size:48px"}, p.emoji));
+  body.appendChild(el("div",{class:"daily-name"}, p.name));
+  body.appendChild(el("div",{class:"daily-cat"}, p.category));
+  body.appendChild(el("div",{class:"daily-meta"},
+    el("span",{class:`chip ${p.margin==="high"?"green":"amber"}`}, `${p.margin} margin`),
+    el("span",{class:"chip"}, `Heat ${p.heat}`),
+    el("span",{class:"chip"}, `AOV ${p.aov}`)));
+  body.appendChild(el("div",{class:"daily-why"}, p.why));
+  body.appendChild(el("div",{class:"daily-cta"},
+    el("button",{class:"btn-primary", onclick:()=>openProduct(p)}, "Open full play")));
 }
 
 // ---------- catalog ----------
+let catalogView = "grid";
 function renderCategories(){
-  const cats = [...new Set(DATA.products.map(p=>p.category))].sort();
+  const cats = [...new Set(D.products.map(p=>p.category))].sort();
   const sel = $("#catalog-category");
   cats.forEach(c => sel.appendChild(el("option",{value:c}, c)));
 }
-function renderCatalog(){
+function filterProducts(){
   const q = $("#catalog-search").value.toLowerCase().trim();
   const cat = $("#catalog-category").value;
   const mar = $("#catalog-margin").value;
   const dif = $("#catalog-difficulty").value;
-
-  const grid = $("#catalog-grid");
-  grid.innerHTML = "";
-  const filtered = DATA.products.filter(p=>{
+  const sea = $("#catalog-season").value;
+  let list = D.products.filter(p=>{
     if(cat && p.category!==cat) return false;
     if(mar && p.margin!==mar) return false;
     if(dif && p.difficulty!==dif) return false;
+    if(sea){
+      const hay = p.season.toLowerCase();
+      if(sea==="year-round" && !hay.includes("year")) return false;
+      if(sea==="summer" && !hay.includes("summer") && !hay.includes("jun") && !hay.includes("jul")) return false;
+      if(sea==="Q4" && !hay.includes("q4") && !hay.includes("oct") && !hay.includes("nov") && !hay.includes("dec")) return false;
+      if(sea==="Jan" && !hay.includes("jan")) return false;
+      if(sea==="gift" && !hay.includes("gift") && !hay.includes("q4")) return false;
+    }
     if(q){
       const blob = [p.name,p.category,p.hook,p.angle,p.why,p.audiences.join(" "),p.channels.join(" ")].join(" ").toLowerCase();
       if(!blob.includes(q)) return false;
     }
     return true;
   });
-
-  if(!filtered.length){
-    grid.appendChild(el("div",{class:"info-card"}, el("p",{}, "No products match those filters. Try clearing one.")));
-    return;
-  }
-
-  filtered.forEach(p=>{
-    const chips = [
-      el("span",{class:`chip ${p.margin==="high"?"green":p.margin==="low"?"red":"amber"}`}, `${p.margin} margin`),
-      el("span",{class:"chip"}, p.difficulty),
-    ];
-    const card = el("div",{class:"product-card", onclick:()=>openProduct(p)},
-      el("div",{class:"product-head"}, el("div",{class:"product-emoji"}, p.emoji)),
-      el("div",{class:"product-name"}, p.name),
-      el("div",{class:"product-cat"}, p.category),
-      el("div",{class:"product-meta"}, ...chips),
-      el("div",{class:"product-blurb"}, p.hook),
-      el("div",{class:"price-row"},
-        el("span",{}, "COGS"), el("b",{}, p.cogs),
-        el("span",{}, "Sell"), el("b",{}, p.sell)
-      )
-    );
-    card.addEventListener("mousemove",(e)=>{
-      const r = card.getBoundingClientRect();
-      card.style.setProperty("--mx", `${e.clientX-r.left}px`);
-    });
-    grid.appendChild(card);
-  });
+  if(catalogView==="heat") list = [...list].sort((a,b)=>b.heat-a.heat);
+  if(catalogView==="saved"){ const favs=getFavs(); list = list.filter(p=>favs.includes(p.id)); }
+  return list;
 }
-
-function openProduct(p){
-  const audienceNames = p.audiences
-    .map(a => DATA.audiences.find(x=>x.key===a)?.name || a)
-    .filter(Boolean);
-  const platformNames = p.platforms
-    .map(k => DATA.platforms.find(x=>x.key===k)?.name || k);
-  const channelNames = p.channels
-    .map(k => DATA.ads.find(x=>x.key===k)?.name || k);
-
-  const body = $("#modal-body");
-  body.innerHTML = "";
-  body.appendChild(el("button",{class:"modal-close","data-close":""}, "×"));
-  body.appendChild(el("div",{style:"font-size:40px"}, p.emoji));
-  body.appendChild(el("h2",{}, p.name));
-  body.appendChild(el("div",{class:"product-cat"}, p.category));
-
-  const meta = el("div",{class:"badge-row", style:"margin-top:10px"},
+function productCard(p){
+  const chips = [
     el("span",{class:`chip ${p.margin==="high"?"green":p.margin==="low"?"red":"amber"}`}, `${p.margin} margin`),
     el("span",{class:"chip"}, p.difficulty),
+  ];
+  const fav = isFav(p.id);
+  const favBtn = el("button",{class:`fav-btn ${fav?"active":""}`, title:"Save", onclick:(e)=>{e.stopPropagation(); const now=toggleFav(p.id); e.currentTarget.classList.toggle("active", now); toast(now?"★ Saved":"Removed from saved"); if(catalogView==="saved") renderCatalog();}}, fav?"★":"☆");
+  const card = el("div",{class:"product-card", onclick:()=>openProduct(p)},
+    el("div",{class:"product-head"},
+      el("div",{class:"product-emoji"}, p.emoji),
+      favBtn),
+    el("div",{class:"product-name"}, p.name),
+    el("div",{class:"product-cat"}, p.category),
+    el("div",{class:"product-meta"}, ...chips),
+    el("div",{class:"product-blurb"}, p.hook),
+    el("div",{class:"price-row"},
+      el("span",{}, "COGS"), el("b",{}, p.cogs),
+      el("span",{}, "Sell"), el("b",{}, p.sell)),
+    el("div",{class:"heat-bar"}, el("div",{class:"heat-fill", style:`width:${p.heat}%`})),
+    el("div",{class:"heat-score"},
+      el("span",{}, `Heat ${p.heat}/100`),
+      el("span",{}, `AOV ${p.aov}`))
+  );
+  card.addEventListener("mousemove",(e)=>{
+    const r = card.getBoundingClientRect();
+    card.style.setProperty("--mx", `${e.clientX-r.left}px`);
+  });
+  return card;
+}
+function renderCatalog(){
+  const grid = $("#catalog-grid");
+  grid.innerHTML = "";
+  const list = filterProducts();
+  if(!list.length){
+    grid.appendChild(el("div",{class:"info-card"},
+      el("p",{}, catalogView==="saved" ? "No saved products yet. Click the ☆ on any card to save it." : "No products match. Try clearing a filter.")));
+    return;
+  }
+  list.forEach(p => grid.appendChild(productCard(p)));
+}
+
+// ---------- product modal + markdown export ----------
+function productBriefMarkdown(p){
+  const aud = p.audiences.map(a => D.audiences.find(x=>x.key===a)?.name || a).filter(Boolean);
+  const plat = p.platforms.map(k => D.platforms.find(x=>x.key===k)?.name || k);
+  const chs = p.channels.map(k => D.ads.find(x=>x.key===k)?.name || k);
+  return `# ${p.emoji} ${p.name}
+**Category:** ${p.category} · **Heat:** ${p.heat}/100 · **Margin:** ${p.margin} · **Difficulty:** ${p.difficulty}
+**COGS:** ${p.cogs} · **Sell:** ${p.sell} · **AOV:** ${p.aov} · **Season:** ${p.season}
+
+## Why this product
+${p.why}
+
+## The hook
+${p.hook}
+
+## Creative angle
+${p.angle}
+
+## Risks to know
+${p.risks}
+
+## Target audiences
+${aud.map(a=>`- ${a}`).join("\n")}
+
+## Best ad channels
+${chs.map(a=>`- ${a}`).join("\n")}
+
+## Recommended platforms
+${plat.map(a=>`- ${a}`).join("\n")}
+`;
+}
+function downloadMd(filename, md){
+  const blob = new Blob([md], {type:"text/markdown"});
+  const url = URL.createObjectURL(blob);
+  const a = el("a",{href:url, download:filename}); document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1500);
+}
+function openProduct(p){
+  const aud = p.audiences.map(a => D.audiences.find(x=>x.key===a)?.name || a).filter(Boolean);
+  const plat = p.platforms.map(k => D.platforms.find(x=>x.key===k)?.name || k);
+  const chs = p.channels.map(k => D.ads.find(x=>x.key===k)?.name || k);
+  const body = $("#modal-body"); body.innerHTML = "";
+  body.appendChild(el("button",{class:"modal-close","data-close":""}, "×"));
+  body.appendChild(el("div",{style:"font-size:44px"}, p.emoji));
+  body.appendChild(el("h2",{}, p.name));
+  body.appendChild(el("div",{class:"product-cat"}, p.category));
+  body.appendChild(el("div",{style:"display:flex;gap:6px;flex-wrap:wrap;margin-top:12px"},
+    el("span",{class:`chip ${p.margin==="high"?"green":p.margin==="low"?"red":"amber"}`}, `${p.margin} margin`),
+    el("span",{class:"chip"}, p.difficulty),
+    el("span",{class:"chip"}, `Heat ${p.heat}/100`),
     el("span",{class:"chip"}, `COGS ${p.cogs}`),
     el("span",{class:"chip"}, `Sell ${p.sell}`),
-  );
-  body.appendChild(meta);
-
-  body.appendChild(el("h4",{}, "Why this product"));
-  body.appendChild(el("p",{}, p.why));
-
-  body.appendChild(el("h4",{}, "The hook"));
-  body.appendChild(el("p",{}, p.hook));
-
-  body.appendChild(el("h4",{}, "Creative angle"));
-  body.appendChild(el("p",{}, p.angle));
-
-  body.appendChild(el("h4",{}, "Risks to know"));
-  body.appendChild(el("p",{}, p.risks));
-
-  body.appendChild(el("h4",{}, "Target audiences"));
-  const ul1 = el("ul",{});
-  audienceNames.forEach(a => ul1.appendChild(el("li",{}, a)));
-  body.appendChild(ul1);
-
-  body.appendChild(el("h4",{}, "Best ad channels"));
-  const ul2 = el("ul",{});
-  channelNames.forEach(a => ul2.appendChild(el("li",{}, a)));
-  body.appendChild(ul2);
-
-  body.appendChild(el("h4",{}, "Recommended platforms"));
-  const ul3 = el("ul",{});
-  platformNames.forEach(a => ul3.appendChild(el("li",{}, a)));
-  body.appendChild(ul3);
-
+    el("span",{class:"chip"}, `AOV ${p.aov}`),
+    el("span",{class:"chip pink"}, p.season)));
+  [["Why this product", p.why],["The hook", p.hook],["Creative angle", p.angle],["Risks to know", p.risks]].forEach(([h,t])=>{
+    body.appendChild(el("h4",{}, h)); body.appendChild(el("p",{}, t));
+  });
+  const ul = (title,arr)=>{ body.appendChild(el("h4",{}, title)); const u=el("ul"); arr.forEach(x=>u.appendChild(el("li",{},x))); body.appendChild(u); };
+  ul("Target audiences", aud);
+  ul("Best ad channels", chs);
+  ul("Recommended platforms", plat);
+  body.appendChild(el("div",{class:"modal-actions"},
+    el("button",{class:"btn-primary", onclick:()=>{ downloadMd(`${p.name.replace(/[^a-z0-9]+/gi,"-").toLowerCase()}-brief.md`, productBriefMarkdown(p)); toast("Brief downloaded"); }}, "↓ Download brief (.md)"),
+    el("button",{class:"btn-ghost", onclick:()=>{ navigator.clipboard.writeText(productBriefMarkdown(p)); toast("Copied to clipboard"); }}, "Copy as markdown"),
+    el("button",{class:"btn-ghost", onclick:()=>{ const now=toggleFav(p.id); toast(now?"★ Saved":"Removed"); openProduct(p); }}, isFav(p.id)?"★ Saved":"☆ Save")));
   $("#modal").classList.add("open");
 }
 
-// ---------- platforms / ads / audiences / tools / rules ----------
+// ---------- platforms / ads / audiences / playbooks / tools / rules ----------
+const listOf = items => { const u=el("ul",{class:"info-list"}); items.forEach(i=>u.appendChild(el("li",{},i))); return u; };
+
 function renderPlatforms(){
-  const g = $("#platforms-grid");
-  DATA.platforms.forEach(p=>{
-    g.appendChild(el("div",{class:"info-card"},
-      el("div",{style:"display:flex;align-items:center;gap:10px;margin-bottom:4px"},
-        el("div",{style:`width:10px;height:10px;border-radius:50%;background:${p.color}`}),
-        el("h3",{}, p.name),
-        el("span",{class:"chip", style:"margin-left:auto"}, p.tag)
-      ),
-      el("p",{}, p.bestFor),
-      el("h4",{style:"font-size:11px;color:var(--brand-2);text-transform:uppercase;letter-spacing:.4px;margin-top:10px"}, "Strengths"),
-      listOf(p.strengths),
-      el("h4",{style:"font-size:11px;color:var(--red);text-transform:uppercase;letter-spacing:.4px;margin-top:10px"}, "Watch-outs"),
-      listOf(p.weaknesses),
-      el("p",{style:"margin-top:10px;font-size:12px"}, el("b",{}, "Fees: "), p.fees),
-    ));
-  });
-}
-function listOf(items){
-  const ul = el("ul",{class:"info-list"});
-  items.forEach(i => ul.appendChild(el("li",{}, i)));
-  return ul;
+  const g = $("#platforms-grid"); g.innerHTML="";
+  D.platforms.forEach(p => g.appendChild(el("div",{class:"info-card"},
+    el("div",{style:"display:flex;align-items:center;gap:10px;margin-bottom:4px"},
+      el("div",{style:`width:10px;height:10px;border-radius:50%;background:${p.color}`}),
+      el("h3",{}, p.name),
+      el("span",{class:"chip", style:"margin-left:auto"}, p.tag)),
+    el("p",{}, p.bestFor),
+    el("div",{class:"sub-h blue"}, "Strengths"), listOf(p.strengths),
+    el("div",{class:"sub-h red"}, "Watch-outs"), listOf(p.weaknesses),
+    el("p",{style:"margin-top:10px;font-size:12px"}, el("b",{}, "Fees: "), p.fees))));
 }
 
 function renderAds(){
-  const g = $("#ads-grid");
-  DATA.ads.forEach(a=>{
-    g.appendChild(el("div",{class:"info-card"},
-      el("div",{style:"display:flex;align-items:center;justify-content:space-between"},
-        el("h3",{}, a.name),
-        el("span",{class:"chip"}, a.tag)
-      ),
-      el("h4",{style:"font-size:11px;color:var(--brand-2);text-transform:uppercase;letter-spacing:.4px;margin-top:10px"}, "Strengths"),
-      listOf(a.strengths),
-      el("h4",{style:"font-size:11px;color:var(--red);text-transform:uppercase;letter-spacing:.4px;margin-top:10px"}, "Watch-outs"),
-      listOf(a.weaknesses),
-      el("p",{style:"margin-top:10px;font-size:12px"}, el("b",{}, "CPM range: "), a.cpm),
-      el("p",{style:"font-size:12px"}, el("b",{}, "Start with: "), a.start),
-      el("h4",{style:"font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin-top:10px"}, "Metrics to watch"),
-      listOf(a.watch),
-    ));
-  });
+  const g = $("#ads-grid"); g.innerHTML="";
+  D.ads.forEach(a => g.appendChild(el("div",{class:"info-card"},
+    el("div",{style:"display:flex;justify-content:space-between"},
+      el("h3",{}, a.name), el("span",{class:"chip"}, a.tag)),
+    el("div",{class:"sub-h blue"}, "Strengths"), listOf(a.strengths),
+    el("div",{class:"sub-h red"}, "Watch-outs"), listOf(a.weaknesses),
+    a.cpm? el("p",{style:"margin-top:10px;font-size:12px"}, el("b",{}, "CPM: "), a.cpm) : null,
+    a.start? el("p",{style:"font-size:12px"}, el("b",{}, "Start: "), a.start) : null,
+    a.watch? el("div",{class:"sub-h amber"}, "Metrics to watch") : null,
+    a.watch? listOf(a.watch) : null)));
 }
 
 function renderAudiences(){
-  const g = $("#audiences-grid");
-  DATA.audiences.forEach(a=>{
-    g.appendChild(el("div",{class:"info-card"},
-      el("h3",{}, a.name),
-      el("p",{style:"font-size:12px"}, el("b",{}, "Where: "), a.where),
-      el("p",{style:"font-size:12px"}, el("b",{}, "Buys: "), a.buys),
-      el("p",{style:"font-size:12px;color:var(--muted)"}, a.why),
-      el("h4",{style:"font-size:11px;color:var(--brand-2);text-transform:uppercase;letter-spacing:.4px;margin-top:10px"}, "Creative hooks"),
-      listOf(a.hooks),
-    ));
-  });
+  const g = $("#audiences-grid"); g.innerHTML="";
+  D.audiences.forEach(a => g.appendChild(el("div",{class:"info-card"},
+    el("h3",{}, a.name),
+    el("p",{style:"font-size:12px"}, el("b",{}, "Where: "), a.where),
+    el("p",{style:"font-size:12px"}, el("b",{}, "Buys: "), a.buys),
+    el("p",{style:"font-size:12px;color:var(--muted)"}, a.why),
+    el("div",{class:"sub-h blue"}, "Creative hooks"), listOf(a.hooks))));
 }
 
 function renderPlaybooks(){
-  const g = $("#playbooks-grid");
-  DATA.playbooks.forEach(pb=>{
-    const ol = el("ol",{});
-    pb.steps.forEach(s => ol.appendChild(el("li",{}, s)));
-    g.appendChild(el("div",{class:"playbook"},
-      el("h3",{}, pb.title),
-      ol
-    ));
+  let g = $("#playbooks-grid");
+  if(!g){ // playbooks section was removed from markup; inject one.
+    const sec = el("section",{id:"playbooks", class:"section"},
+      el("div",{class:"section-head"},
+        el("h2",{}, "How to sell — playbooks"),
+        el("p",{}, "Step-by-step plays from what consistently works.")),
+      el("div",{class:"playbook-grid", id:"playbooks-grid"}));
+    document.querySelector("#audiences").before(sec);
+    g = $("#playbooks-grid");
+  }
+  g.innerHTML="";
+  D.playbooks.forEach(pb => {
+    const ol = el("ol"); pb.steps.forEach(s => ol.appendChild(el("li",{}, s)));
+    g.appendChild(el("div",{class:"playbook"}, el("h3",{}, pb.title), ol));
   });
 }
 
 function renderTools(){
-  const g = $("#tools-grid");
-  DATA.tools.forEach(t=>{
-    g.appendChild(el("a",{class:"tool", href:t.url, target:"_blank", rel:"noopener noreferrer"},
-      el("div",{class:"tool-tag"}, t.tag),
-      el("h4",{}, t.name),
-      el("p",{}, t.why),
-    ));
-  });
+  const g = $("#tools-grid"); g.innerHTML="";
+  D.tools.forEach(t => g.appendChild(el("a",{class:"tool", href:t.url, target:"_blank", rel:"noopener noreferrer"},
+    el("div",{class:"tool-tag"}, t.tag),
+    el("h4",{}, t.name),
+    el("p",{}, t.why))));
 }
 
 function renderRules(){
-  const g = $("#rules-grid");
-  DATA.rules.forEach(r=>{
-    g.appendChild(el("div",{class:"rule"},
-      el("h4",{}, r.title),
-      el("p",{}, r.text),
-    ));
+  const g = $("#rules-grid"); g.innerHTML="";
+  D.rules.forEach(r => g.appendChild(el("div",{class:"rule"},
+    el("h4",{}, r.title), el("p",{}, r.text))));
+}
+
+// ---------- templates / scripts / emails / calendar ----------
+function renderTemplates(){
+  const g = $("#templates-grid"); g.innerHTML="";
+  D.adTemplates.forEach(t => {
+    const full = `${t.hook}\n\n${t.body}\n\n${t.cta}`;
+    g.appendChild(el("div",{class:"template-card"},
+      el("button",{class:"copy-btn", onclick:()=>{navigator.clipboard.writeText(full); toast("Copied");}}, "Copy"),
+      el("h4",{}, t.product),
+      el("div",{class:"t-hook"}, t.hook),
+      el("div",{class:"t-body"}, t.body),
+      el("div",{class:"t-cta"}, t.cta)));
   });
 }
 
-// ---------- modal ----------
-document.addEventListener("click", (e)=>{
-  if(e.target.hasAttribute("data-close") || e.target.classList.contains("modal-close")){
-    $("#modal").classList.remove("open");
-  }
-});
-document.addEventListener("keydown",(e)=>{
-  if(e.key==="Escape") $("#modal").classList.remove("open");
-});
+function renderScripts(){
+  const g = $("#scripts-grid"); g.innerHTML="";
+  D.creativeScripts.forEach(s => {
+    const ol = el("ol"); s.beats.forEach(b => ol.appendChild(el("li",{}, b)));
+    g.appendChild(el("div",{class:"script-card"},
+      el("h3",{}, s.name), ol,
+      el("button",{class:"copy-btn", style:"position:static;margin-top:12px", onclick:()=>{navigator.clipboard.writeText(`${s.name}\n\n${s.beats.join("\n")}`); toast("Script copied");}}, "Copy script")));
+  });
+}
+
+function renderEmails(){
+  const g = $("#emails-grid"); if(!g) return;
+  g.innerHTML="";
+  D.emailTemplates.forEach(t => g.appendChild(el("div",{class:"email-card"},
+    el("button",{class:"copy-btn", onclick:()=>{navigator.clipboard.writeText(`Subject: ${t.subject}\n\n${t.body}`); toast("Email copied");}}, "Copy"),
+    el("div",{class:"e-flow"}, t.flow),
+    el("div",{class:"e-subject"}, t.subject),
+    el("div",{class:"e-body"}, t.body))));
+}
+
+function renderCalendar(){
+  const g = $("#calendar-grid"); g.innerHTML="";
+  const months = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+  const names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const cur = new Date().getMonth();
+  months.forEach((m,i)=>{
+    const data = D.seasonalCalendar[m];
+    const ul = el("ul"); data.hot.forEach(h => ul.appendChild(el("li",{}, h)));
+    g.appendChild(el("div",{class:`month ${i===cur?"current":""}`},
+      el("h4",{}, el("span",{class:"mo-name"}, names[i]), i===cur?el("span",{class:"chip green"},"Now"):null),
+      el("div",{class:"m-theme"}, data.theme), ul));
+  });
+}
+
+// ---------- calculators ----------
+function calcProfit(){
+  const sell = +$("#pm-sell").value || 0;
+  const cogs = +$("#pm-cogs").value || 0;
+  const ship = +$("#pm-ship").value || 0;
+  const feesPct = (+$("#pm-fees").value || 0)/100;
+  const fees = sell * feesPct;
+  const profit = sell - cogs - ship - fees;
+  const margin = sell? profit/sell : 0;
+  const cls = margin>0.3?"good":margin>0.15?"warn":"bad";
+  $("#pm-out").innerHTML="";
+  $("#pm-out").append(
+    line("Revenue", usd(sell)),
+    line("Fees (on sale)", "− "+usd(fees)),
+    line("Product + ship", "− "+usd(cogs+ship)),
+    line("Profit / order", usd(profit), cls),
+    line("Margin", pct(margin), cls));
+}
+function calcBreakeven(){
+  const sell = +$("#br-sell").value || 0;
+  const cost = +$("#br-cost").value || 0;
+  const targetMargin = (+$("#br-margin").value || 0)/100;
+  const contribution = sell - cost;
+  const breakevenRoas = sell && contribution>0 ? sell/contribution : 0;
+  const neededCPA = contribution>0 ? contribution - (sell*targetMargin) : 0;
+  const targetRoas = neededCPA>0 && sell ? sell/neededCPA : 0;
+  $("#br-out").innerHTML="";
+  $("#br-out").append(
+    line("Contribution / order", usd(contribution)),
+    line("Breakeven ROAS", breakevenRoas.toFixed(2)+"×", contribution>0?"good":"bad"),
+    line(`For ${$("#br-margin").value}% margin, target ROAS`, targetRoas>0?targetRoas.toFixed(2)+"×":"n/a", targetRoas>2?"good":targetRoas>1.5?"warn":"bad"),
+    line("Max CPA at target", neededCPA>0?usd(neededCPA):"n/a"));
+}
+function calcAdBudget(){
+  const spend = +$("#ad-spend").value || 0;
+  const roas = +$("#ad-roas").value || 0;
+  const cm = (+$("#ad-cm").value || 0)/100;
+  const rev = spend * roas;
+  const monthRev = rev * 30;
+  const grossProfit = monthRev * cm;
+  const netProfit = grossProfit - (spend * 30);
+  const cls = netProfit>0?"good":"bad";
+  $("#ad-out").innerHTML="";
+  $("#ad-out").append(
+    line("Daily revenue", usd(rev)),
+    line("Monthly revenue", usd(monthRev)),
+    line("Gross profit / mo", usd(grossProfit)),
+    line("Ad spend / mo", "− "+usd(spend*30)),
+    line("Net profit / mo", usd(netProfit), cls));
+}
+function calcAov(){
+  const cur = +$("#aov-cur").value || 0;
+  const nw = +$("#aov-new").value || 0;
+  const orders = +$("#aov-orders").value || 0;
+  const gm = (+$("#aov-gm").value || 0)/100;
+  const delta = (nw-cur) * orders * gm;
+  const yearly = delta * 12;
+  const cls = delta>0?"good":"bad";
+  $("#aov-out").innerHTML="";
+  $("#aov-out").append(
+    line("AOV uplift / order", usd(nw-cur)),
+    line("Extra gross profit / mo", usd(delta), cls),
+    line("Annual impact", usd(yearly), cls));
+}
+function line(label, value, cls){
+  return el("div",{class:"calc-line"},
+    el("span",{}, label),
+    el("span",{class:`v ${cls||""}`}, value));
+}
+function wireCalcs(){
+  ["#pm-sell","#pm-cogs","#pm-ship","#pm-fees"].forEach(id=>$(id).addEventListener("input",calcProfit));
+  ["#br-sell","#br-cost","#br-margin"].forEach(id=>$(id).addEventListener("input",calcBreakeven));
+  ["#ad-spend","#ad-roas","#ad-cm"].forEach(id=>$(id).addEventListener("input",calcAdBudget));
+  ["#aov-cur","#aov-new","#aov-orders","#aov-gm"].forEach(id=>$(id).addEventListener("input",calcAov));
+  calcProfit(); calcBreakeven(); calcAdBudget(); calcAov();
+}
+
+// ---------- command palette (⌘K) ----------
+function buildIndex(){
+  const out = [];
+  D.products.forEach(p=>out.push({kind:"Product", icon:p.emoji, title:p.name, sub:p.category+" · Heat "+p.heat, action:()=>openProduct(p), search:[p.name,p.category,p.hook,p.why].join(" ")}));
+  D.platforms.forEach(p=>out.push({kind:"Platform", icon:"🛍", title:p.name, sub:p.bestFor, href:"#platforms", search:[p.name,p.tag,p.bestFor].join(" ")}));
+  D.ads.forEach(a=>out.push({kind:"Ad channel", icon:"📣", title:a.name, sub:a.tag, href:"#ads", search:[a.name,a.tag].join(" ")}));
+  D.audiences.forEach(a=>out.push({kind:"Audience", icon:"👥", title:a.name, sub:a.where, href:"#audiences", search:[a.name,a.where,a.buys].join(" ")}));
+  D.playbooks.forEach(pb=>out.push({kind:"Playbook", icon:"📘", title:pb.title, sub:"Step-by-step", href:"#playbooks", search:pb.title+" "+pb.steps.join(" ")}));
+  D.tools.forEach(t=>out.push({kind:"Tool", icon:"🔧", title:t.name, sub:t.why, hrefExternal:t.url, search:[t.name,t.tag,t.why].join(" ")}));
+  D.adTemplates.forEach(t=>out.push({kind:"Template", icon:"✍️", title:t.product+" — "+t.hook.slice(0,40)+"…", sub:"Ad copy", href:"#templates", search:[t.product,t.hook,t.body].join(" ")}));
+  D.creativeScripts.forEach(s=>out.push({kind:"Script", icon:"🎬", title:s.name, sub:"Video script", href:"#scripts", search:s.name}));
+  return out;
+}
+let PAL_INDEX = [];
+let palSelected = 0;
+let palResults = [];
+function openPalette(){
+  $("#palette").classList.add("open");
+  $("#palette-input").value = "";
+  $("#palette-input").focus();
+  renderPalette("");
+}
+function closePalette(){ $("#palette").classList.remove("open"); }
+function renderPalette(q){
+  q = q.trim().toLowerCase();
+  const all = PAL_INDEX;
+  palResults = (q ? all.filter(i=>i.search.toLowerCase().includes(q)) : all).slice(0, 40);
+  palSelected = 0;
+  const r = $("#palette-results"); r.innerHTML="";
+  if(!palResults.length){ r.appendChild(el("div",{class:"palette-empty"}, "No results.")); return; }
+  palResults.forEach((it,i)=>{
+    const row = el("div",{class:`palette-item ${i===0?"active":""}`, onclick:()=>runPalette(it)},
+      el("div",{class:"palette-icon"}, it.icon),
+      el("div",{class:"palette-main"},
+        el("div",{class:"palette-title"}, it.title),
+        el("div",{class:"palette-sub"}, it.sub||"")),
+      el("div",{class:"palette-kind"}, it.kind));
+    r.appendChild(row);
+  });
+}
+function runPalette(item){
+  closePalette();
+  if(item.action) item.action();
+  else if(item.hrefExternal) window.open(item.hrefExternal, "_blank", "noopener");
+  else if(item.href) location.hash = item.href;
+}
+function palNav(dir){
+  palSelected = (palSelected + dir + palResults.length) % palResults.length;
+  $$("#palette-results .palette-item").forEach((n,i)=>n.classList.toggle("active", i===palSelected));
+  const active = $$(".palette-item")[palSelected];
+  if(active) active.scrollIntoView({block:"nearest"});
+}
 
 // ---------- live feeds ----------
-const REDDIT_SUBS = ["dropship","ecommerce","Shopify","FulfillmentByAmazon","smallbusiness"];
+const SUBS = ["dropship","ecommerce","Shopify","FulfillmentByAmazon","smallbusiness"];
 async function fetchReddit(){
-  const sub = REDDIT_SUBS[Math.floor(Math.random()*REDDIT_SUBS.length)];
-  const alt = REDDIT_SUBS.filter(s=>s!==sub);
-  const urls = [sub, ...alt].map(s => `https://www.reddit.com/r/${s}/top.json?limit=6&t=week`);
-  for(const url of urls){
-    try {
-      const r = await fetch(url, {headers:{"Accept":"application/json"}});
-      if(!r.ok) continue;
-      const j = await r.json();
-      const posts = (j.data?.children||[]).map(c=>c.data).filter(p=>!p.stickied);
-      if(posts.length) return posts;
-    } catch(e){ continue; }
-  }
-  return [];
+  const urls = SUBS.map(s => `https://www.reddit.com/r/${s}/top.json?limit=5&t=week`);
+  const results = await Promise.allSettled(urls.map(u=>fetch(u,{headers:{"Accept":"application/json"}}).then(r=>r.ok?r.json():null)));
+  const all = [];
+  results.forEach(r=>{ if(r.status==="fulfilled" && r.value?.data?.children){ all.push(...r.value.data.children.map(c=>c.data).filter(p=>!p.stickied)); } });
+  return all.sort((a,b)=>b.score-a.score).slice(0,8);
 }
 function renderReddit(posts){
-  const wrap = $("#reddit-feed");
-  wrap.innerHTML = "";
-  if(!posts.length){
-    wrap.appendChild(el("div",{class:"feed-item"},
-      el("div",{class:"feed-title"}, "Live community feed couldn't load"),
-      el("div",{class:"feed-meta"},
-        el("span",{}, "Reddit may be rate-limiting. Hit Refresh in a minute."),
-      )
-    ));
-    return;
-  }
-  posts.slice(0,6).forEach(p=>{
-    const a = el("a",{class:"feed-item", href:`https://reddit.com${p.permalink}`, target:"_blank", rel:"noopener noreferrer"},
-      el("div",{class:"feed-title"}, p.title),
-      el("div",{class:"feed-meta"},
-        el("span",{class:"chip"}, `r/${p.subreddit}`),
-        el("span",{}, `▲ ${p.score}`),
-        el("span",{}, `💬 ${p.num_comments}`),
-        el("span",{}, fmtTime(new Date(p.created_utc*1000))),
-      )
-    );
-    wrap.appendChild(a);
-  });
+  const w = $("#reddit-feed"); w.innerHTML="";
+  if(!posts.length){ w.appendChild(el("div",{class:"feed-item"}, el("div",{class:"feed-title"}, "Reddit rate-limited — try Refresh in a minute"))); return; }
+  posts.forEach(p=>w.appendChild(el("a",{class:"feed-item", href:`https://reddit.com${p.permalink}`, target:"_blank", rel:"noopener noreferrer"},
+    el("div",{class:"feed-title"}, p.title),
+    el("div",{class:"feed-meta"},
+      el("span",{class:"chip"}, `r/${p.subreddit}`),
+      el("span",{}, `▲ ${p.score}`), el("span",{}, `💬 ${p.num_comments}`),
+      el("span",{}, fmtTime(new Date(p.created_utc*1000)))))));
 }
 
 async function fetchHN(){
-  try {
-    const r = await fetch("https://hn.algolia.com/api/v1/search_by_date?query=shopify%20OR%20dropshipping%20OR%20ecommerce%20OR%20%22tiktok%20shop%22&tags=story&hitsPerPage=8");
-    const j = await r.json();
-    return j.hits || [];
-  } catch(e){ return []; }
+  try{ const r = await fetch("https://hn.algolia.com/api/v1/search_by_date?query=shopify%20OR%20dropshipping%20OR%20ecommerce%20OR%20%22tiktok%20shop%22&tags=story&hitsPerPage=10"); const j = await r.json(); return j.hits||[]; } catch(e){ return []; }
 }
 function renderHN(hits){
-  const wrap = $("#hn-feed");
-  wrap.innerHTML = "";
-  if(!hits.length){
-    wrap.appendChild(el("div",{class:"feed-item"},
-      el("div",{class:"feed-title"}, "News feed couldn't load — try Refresh"),
-    ));
+  const w = $("#hn-feed"); w.innerHTML="";
+  if(!hits.length){ w.appendChild(el("div",{class:"feed-item"}, el("div",{class:"feed-title"}, "HN feed unavailable"))); return; }
+  hits.slice(0,8).forEach(h => w.appendChild(el("a",{class:"feed-item", href:h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, target:"_blank", rel:"noopener noreferrer"},
+    el("div",{class:"feed-title"}, h.title || "(untitled)"),
+    el("div",{class:"feed-meta"},
+      el("span",{class:"chip"}, "HN"),
+      el("span",{}, `▲ ${h.points||0}`), el("span",{}, `💬 ${h.num_comments||0}`),
+      h.created_at ? el("span",{}, fmtTime(new Date(h.created_at))) : null))));
+}
+
+async function fetchPH(){
+  // Product Hunt RSS via a CORS-friendly proxy that exists publicly — fall back to curated if blocked.
+  try {
+    const r = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent("https://www.producthunt.com/feed?category=undefined"));
+    if(!r.ok) throw 0;
+    const txt = await r.text();
+    const doc = new DOMParser().parseFromString(txt, "text/xml");
+    const items = [...doc.querySelectorAll("item")].slice(0,8).map(it=>({
+      title: it.querySelector("title")?.textContent || "",
+      link: it.querySelector("link")?.textContent || "",
+      pub: it.querySelector("pubDate")?.textContent || ""
+    }));
+    if(items.length) return items;
+  } catch(e){}
+  return null;
+}
+function renderPH(items){
+  const w = $("#ph-feed"); w.innerHTML="";
+  if(!items || !items.length){
+    // fallback: curated recent launch categories
+    const fallback = [
+      {title:"AI commerce tools surge — see what's launching", link:"https://www.producthunt.com/topics/e-commerce"},
+      {title:"Headless Shopify alternatives trending", link:"https://www.producthunt.com/topics/shopify"},
+      {title:"New dropship automation platforms", link:"https://www.producthunt.com/topics/dropshipping"},
+      {title:"Creator-commerce tools", link:"https://www.producthunt.com/topics/creator-economy"}];
+    fallback.forEach(f => w.appendChild(el("a",{class:"feed-item", href:f.link, target:"_blank", rel:"noopener noreferrer"},
+      el("div",{class:"feed-title"}, f.title),
+      el("div",{class:"feed-meta"}, el("span",{class:"chip"}, "PH Topic")))));
     return;
   }
-  hits.slice(0,6).forEach(h=>{
-    const url = h.url || `https://news.ycombinator.com/item?id=${h.objectID}`;
-    const a = el("a",{class:"feed-item", href:url, target:"_blank", rel:"noopener noreferrer"},
-      el("div",{class:"feed-title"}, h.title || "(untitled)"),
-      el("div",{class:"feed-meta"},
-        el("span",{class:"chip"}, "HN"),
-        el("span",{}, `▲ ${h.points||0}`),
-        el("span",{}, `💬 ${h.num_comments||0}`),
-        h.created_at ? el("span",{}, fmtTime(new Date(h.created_at))) : null,
-      )
-    );
-    wrap.appendChild(a);
-  });
+  items.forEach(it => w.appendChild(el("a",{class:"feed-item", href:it.link, target:"_blank", rel:"noopener noreferrer"},
+    el("div",{class:"feed-title"}, it.title),
+    el("div",{class:"feed-meta"}, el("span",{class:"chip green"}, "New launch"), it.pub ? el("span",{}, fmtTime(new Date(it.pub))) : null))));
 }
 
-// A curated "rising interest" feed — baked in, but rotated so each refresh shows
-// a different slice. Keeps the section live-feeling even when external feeds fail.
 const RISING = [
-  {term:"cozy gaming", note:"Aesthetic gaming setups, pastel peripherals, female gamer niche."},
-  {term:"silent walking", note:"Wellness trend → resistance bands, mindful walking shoes."},
+  {term:"cozy gaming", note:"Aesthetic gaming setups, pastel peripherals."},
+  {term:"silent walking", note:"Wellness trend — resistance bands, mindful walking shoes."},
   {term:"sleep tourism", note:"Sleep masks, weighted blankets, travel pillows."},
-  {term:"dopamine decor", note:"Bright, maximalist home decor — color-blocked everything."},
-  {term:"clean girl aesthetic", note:"Minimalist beauty, skincare, neutral tone apparel."},
-  {term:"mob wife", note:"Fur coats, gold jewelry, red lipstick — Y2K glam revival."},
+  {term:"dopamine decor", note:"Bright, maximalist home decor."},
+  {term:"clean girl aesthetic", note:"Minimalist beauty, neutral tones."},
+  {term:"mob wife", note:"Fur coats, gold jewelry, red lipstick — Y2K glam."},
   {term:"run club", note:"Running accessories, hydration belts, branded caps."},
-  {term:"pickleball", note:"Paddles, bags, apparel — fastest-growing sport in the US."},
-  {term:"pet calming", note:"Anxiety beds, thunder shirts, pheromone diffusers."},
-  {term:"tiny home / van life", note:"Compact appliances, solar chargers, storage hacks."},
-  {term:"cold plunge at home", note:"Portable tubs, ice makers, recovery gear."},
-  {term:"AI-free / analog", note:"Paper planners, film cameras, print-over-digital niche."},
-  {term:"Stanley cup dupes", note:"Insulated tumblers, customization, Gen Z hydration."},
-  {term:"ergonomic gaming", note:"Wrist rests, monitor arms, blue-light glasses."},
+  {term:"pickleball", note:"Paddles, bags, apparel — fastest-growing sport US."},
+  {term:"pet calming", note:"Anxiety beds, thunder shirts, diffusers."},
+  {term:"tiny home / van life", note:"Compact appliances, solar chargers."},
+  {term:"cold plunge at home", note:"Portable tubs, ice makers, recovery."},
+  {term:"AI-free / analog", note:"Paper planners, film cameras."},
+  {term:"Stanley cup dupes", note:"Insulated tumblers, customization."},
+  {term:"ergonomic gaming", note:"Wrist rests, monitor arms, blue-light."},
+  {term:"matcha everything", note:"Whisks, bowls, matcha + adaptogens."},
+  {term:"hair oiling", note:"Ayurvedic oils, scalp massagers."},
 ];
 function renderRising(){
-  const wrap = $("#trends-feed");
-  wrap.innerHTML = "";
+  const w = $("#trends-feed"); w.innerHTML="";
   const shuffled = [...RISING].sort(()=>Math.random()-0.5).slice(0,6);
-  shuffled.forEach(t=>{
-    wrap.appendChild(el("div",{class:"feed-item"},
-      el("div",{class:"feed-title"}, t.term),
-      el("div",{class:"feed-meta"},
-        el("span",{class:"chip green"}, "Rising"),
-        el("span",{}, t.note),
-      )
-    ));
-  });
+  shuffled.forEach(t => w.appendChild(el("div",{class:"feed-item"},
+    el("div",{class:"feed-title"}, t.term),
+    el("div",{class:"feed-meta"}, el("span",{class:"chip green"}, "Rising"), el("span",{}, t.note)))));
 }
 
-// ---------- orchestration ----------
+// ---------- refresh orchestration ----------
 async function refresh(){
-  const tick = $("#pulse-tick");
-  const fill = $("#pulse-fill");
-  fill.style.width = "15%"; tick.textContent = "Scanning public signals…";
-
+  $("#last-updated").textContent = "Refreshing…";
   renderRising();
-  fill.style.width = "40%";
-  tick.textContent = "Pulling seller community threads…";
-  const [reddit, hn] = await Promise.all([fetchReddit(), fetchHN()]);
-  fill.style.width = "75%";
-  tick.textContent = "Rendering insights…";
-  renderReddit(reddit);
-  renderHN(hn);
-
-  fill.style.width = "100%";
+  const [reddit, hn, ph] = await Promise.all([fetchReddit(), fetchHN(), fetchPH()]);
+  renderReddit(reddit); renderHN(hn); renderPH(ph);
   const now = new Date();
   $("#last-updated").textContent = `Updated ${now.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}`;
-  tick.textContent = `Pulse healthy · ${reddit.length + hn.length} fresh signals`;
-  setTimeout(()=>{ fill.style.width = "55%"; }, 1200);
 }
+
+// ---------- modal close ----------
+document.addEventListener("click",(e)=>{ if(e.target.hasAttribute("data-close") || e.target.classList.contains("modal-close")){ $("#modal").classList.remove("open"); $("#palette").classList.remove("open"); }});
+document.addEventListener("keydown",(e)=>{
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="k"){ e.preventDefault(); openPalette(); return; }
+  if(e.key==="Escape"){ $("#modal").classList.remove("open"); $("#palette").classList.remove("open"); return; }
+  if($("#palette").classList.contains("open")){
+    if(e.key==="ArrowDown"){ e.preventDefault(); palNav(1); }
+    else if(e.key==="ArrowUp"){ e.preventDefault(); palNav(-1); }
+    else if(e.key==="Enter"){ e.preventDefault(); if(palResults[palSelected]) runPalette(palResults[palSelected]); }
+  }
+});
 
 // ---------- init ----------
 document.addEventListener("DOMContentLoaded", ()=>{
   renderKpis();
+  renderDaily();
   renderCategories();
   renderCatalog();
   renderPlatforms();
@@ -386,14 +587,20 @@ document.addEventListener("DOMContentLoaded", ()=>{
   renderAds();
   renderTools();
   renderRules();
+  renderTemplates();
+  renderScripts();
+  renderEmails();
+  renderCalendar();
+  wireCalcs();
+  PAL_INDEX = buildIndex();
 
   $("#catalog-search").addEventListener("input", renderCatalog);
-  $("#catalog-category").addEventListener("change", renderCatalog);
-  $("#catalog-margin").addEventListener("change", renderCatalog);
-  $("#catalog-difficulty").addEventListener("change", renderCatalog);
+  ["#catalog-category","#catalog-margin","#catalog-difficulty","#catalog-season"].forEach(id => $(id).addEventListener("change", renderCatalog));
+  $$(".view-btn").forEach(b => b.addEventListener("click", ()=>{ $$(".view-btn").forEach(x=>x.classList.remove("active")); b.classList.add("active"); catalogView = b.dataset.view; renderCatalog(); }));
   $("#refresh").addEventListener("click", refresh);
+  $("#open-search").addEventListener("click", openPalette);
+  $("#palette-input").addEventListener("input", e => renderPalette(e.target.value));
 
   refresh();
-  // Auto-refresh every 20 minutes if the tab stays open.
   setInterval(refresh, 20*60*1000);
 });
