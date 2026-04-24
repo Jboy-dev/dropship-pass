@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dropship Pass — Global Product Intelligence</title>
+<meta name="description" content="Live dropshipping intelligence: trending products, where to sell them, how to market them, and who to target." />
+<link rel="stylesheet" href="styles.css" />
+<link rel="preconnect" href="https://www.reddit.com" />
+<link rel="preconnect" href="https://hn.algolia.com" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo"></div>
+    <div>
+      <div class="brand-name">Dropship Pass</div>
+      <div class="brand-sub">Global product intelligence</div>
+    </div>
+  </div>
+  <nav class="nav">
+    <a href="#trending">Trending</a>
+    <a href="#catalog">Winners</a>
+    <a href="#platforms">Where to sell</a>
+    <a href="#playbooks">How to sell</a>
+    <a href="#audiences">Audiences</a>
+    <a href="#ads">Ad channels</a>
+    <a href="#tools">Tools</a>
+  </nav>
+  <div class="top-actions">
+    <span id="last-updated" class="last-updated" title="Live data refreshed timestamp">—</span>
+    <button id="refresh" class="btn-primary" title="Refresh live data">↻ Refresh</button>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero-grid">
+    <div class="hero-copy">
+      <h1>Find the winning product. Know where it sells. Know how to sell it.</h1>
+      <p>Dropship Pass blends a curated knowledge base with live signals from merchant communities, news feeds, and open trend data so you can move faster than the hype cycle.</p>
+      <div class="hero-cta">
+        <a class="btn-primary" href="#trending">See what's hot now</a>
+        <a class="btn-ghost" href="#playbooks">Read the playbooks</a>
+      </div>
+      <ul class="hero-bullets">
+        <li>✓ Live trending discussions from global seller communities</li>
+        <li>✓ Curated winners across 12 evergreen categories</li>
+        <li>✓ Platform comparison: Shopify, Amazon, TikTok Shop, Etsy, eBay, Temu</li>
+        <li>✓ Ad channel playbooks: Meta, TikTok, Google, Pinterest, YouTube</li>
+        <li>✓ Audience profiles with targeting angles & creative hooks</li>
+      </ul>
+    </div>
+    <div class="hero-card">
+      <div class="kpi-row">
+        <div class="kpi"><div class="kpi-num" id="kpi-products">—</div><div class="kpi-label">Winners tracked</div></div>
+        <div class="kpi"><div class="kpi-num" id="kpi-platforms">—</div><div class="kpi-label">Sales platforms</div></div>
+        <div class="kpi"><div class="kpi-num" id="kpi-channels">—</div><div class="kpi-label">Ad channels</div></div>
+        <div class="kpi"><div class="kpi-num" id="kpi-audiences">—</div><div class="kpi-label">Audience profiles</div></div>
+      </div>
+      <div class="pulse-wrap">
+        <div class="pulse-label">Market pulse</div>
+        <div class="pulse-bar"><div id="pulse-fill" class="pulse-fill"></div></div>
+        <div class="pulse-tick" id="pulse-tick">Scanning public signals…</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="trending" class="section">
+  <div class="section-head">
+    <h2>Live trending — right now</h2>
+    <p>Pulled live from public seller communities (Reddit r/dropship, r/ecommerce, r/Shopify) and Hacker News commerce threads. Refresh to re-pull.</p>
+  </div>
+  <div class="trending-grid">
+    <div class="trend-col">
+      <h3>Seller chatter</h3>
+      <div id="reddit-feed" class="feed"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+    </div>
+    <div class="trend-col">
+      <h3>Commerce news</h3>
+      <div id="hn-feed" class="feed"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+    </div>
+    <div class="trend-col">
+      <h3>Rising search interest</h3>
+      <div id="trends-feed" class="feed"></div>
+    </div>
+  </div>
+</section>
+
+<section id="catalog" class="section">
+  <div class="section-head">
+    <h2>Winner catalog</h2>
+    <p>Curated evergreen and seasonal winners. Filter by category, margin, and difficulty. Click a card for the full play.</p>
+  </div>
+  <div class="filter-bar">
+    <input id="catalog-search" class="search" placeholder="Search products, categories, keywords…" />
+    <select id="catalog-category" class="select"><option value="">All categories</option></select>
+    <select id="catalog-margin" class="select">
+      <option value="">Any margin</option>
+      <option value="high">High (≥3×)</option>
+      <option value="mid">Mid (2–3×)</option>
+      <option value="low">Low (&lt;2×)</option>
+    </select>
+    <select id="catalog-difficulty" class="select">
+      <option value="">Any difficulty</option>
+      <option value="easy">Beginner</option>
+      <option value="mid">Intermediate</option>
+      <option value="hard">Advanced</option>
+    </select>
+  </div>
+  <div id="catalog-grid" class="catalog-grid"></div>
+</section>
+
+<section id="platforms" class="section">
+  <div class="section-head">
+    <h2>Where to sell</h2>
+    <p>Choose the right storefront for your product, audience, and budget. Each platform has a different cost, audience, and set of rules.</p>
+  </div>
+  <div id="platforms-grid" class="cards-grid"></div>
+</section>
+
+<section id="playbooks" class="section">
+  <div class="section-head">
+    <h2>How to sell — playbooks</h2>
+    <p>Step-by-step plays distilled from what's consistently working. Copy the framework, not the specific product.</p>
+  </div>
+  <div id="playbooks-grid" class="playbook-grid"></div>
+</section>
+
+<section id="audiences" class="section">
+  <div class="section-head">
+    <h2>Audience profiles</h2>
+    <p>Who buys what, why they buy, and the hooks that convert them. Pair an audience with a product and a channel.</p>
+  </div>
+  <div id="audiences-grid" class="cards-grid"></div>
+</section>
+
+<section id="ads" class="section">
+  <div class="section-head">
+    <h2>Ad channels</h2>
+    <p>Each platform has a personality. Match your product's emotional pitch to the channel's strengths.</p>
+  </div>
+  <div id="ads-grid" class="cards-grid"></div>
+</section>
+
+<section id="tools" class="section">
+  <div class="section-head">
+    <h2>Free & low-cost tools</h2>
+    <p>Research, source, launch, and scale without enterprise budgets.</p>
+  </div>
+  <div id="tools-grid" class="tools-grid"></div>
+</section>
+
+<section id="rules" class="section">
+  <div class="section-head">
+    <h2>Stay out of trouble</h2>
+    <p>The fastest way to get banned is to ignore the rules. A short reality check.</p>
+  </div>
+  <div class="rules-grid" id="rules-grid"></div>
+</section>
+
+<footer class="footer">
+  <div>Dropship Pass · built as a free research hub · data refreshed client-side on load</div>
+  <div class="footer-links">
+    <a href="#trending">Trending</a>
+    <a href="#catalog">Winners</a>
+    <a href="#platforms">Platforms</a>
+    <a href="#playbooks">Playbooks</a>
+  </div>
+</footer>
+
+<div id="modal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-body" id="modal-body" role="dialog" aria-modal="true"></div>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
