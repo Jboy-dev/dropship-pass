@@ -1,0 +1,12 @@
+{
+  "name": "Dropship Pass — Global Product Intelligence",
+  "short_name": "Dropship Pass",
+  "description": "Live dropshipping intelligence: trending products, where to sell them, how to market them, and who to target.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#06070c",
+  "theme_color": "#7c5cff",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

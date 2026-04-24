@@ -458,6 +458,128 @@ function palNav(dir){
   if(active) active.scrollIntoView({block:"nearest"});
 }
 
+// ---------- regions ----------
+function renderRegions(){
+  const g = $("#regions-grid"); if(!g) return; g.innerHTML = "";
+  D.regions.forEach(r => g.appendChild(el("div",{class:"info-card"},
+    el("div",{style:"display:flex;align-items:center;gap:10px;margin-bottom:4px"},
+      el("div",{style:"font-size:22px"}, r.flag),
+      el("h3",{}, r.name),
+      el("span",{class:"chip", style:"margin-left:auto"}, r.code)),
+    el("p",{style:"font-size:13px"}, r.notes),
+    el("div",{class:"sub-h blue"}, "Hot categories"), listOf(r.hot),
+    el("div",{class:"sub-h amber"}, "Platforms"), listOf(r.platforms),
+    el("div",{class:"sub-h green"}, "Ad channels"), listOf(r.channels))));
+}
+
+// ---------- FAQ ----------
+function renderFaq(){
+  const g = $("#faq-grid"); if(!g) return; g.innerHTML = "";
+  D.faq.forEach((f,i) => {
+    const item = el("div",{class:"faq-item"},
+      el("div",{class:"faq-q"}, f.q),
+      el("div",{class:"faq-a"}, f.a));
+    item.querySelector(".faq-q").addEventListener("click", ()=> item.classList.toggle("open"));
+    g.appendChild(item);
+  });
+}
+
+// ---------- Launch checklist (persisted) ----------
+const CHK_KEY = "dropship.chk.v1";
+const getChk = ()=>{ try{return JSON.parse(localStorage.getItem(CHK_KEY)||"{}")}catch(e){return{}} };
+const setChk = o => localStorage.setItem(CHK_KEY, JSON.stringify(o));
+function renderChecklist(){
+  const g = $("#checklist-grid"); if(!g) return; g.innerHTML = "";
+  const state = getChk();
+  let total = 0, done = 0;
+  D.launchChecklist.forEach((phase, pi) => {
+    const col = el("div",{class:"checklist-phase"}, el("h3",{}, phase.phase));
+    phase.items.forEach((item, ii) => {
+      const key = `${pi}.${ii}`; total++;
+      const isDone = !!state[key]; if(isDone) done++;
+      const row = el("div",{class:`chk-item ${isDone?"done":""}`},
+        el("div",{class:"chk-box"}, "✓"),
+        el("div",{}, item));
+      row.addEventListener("click", ()=>{
+        const s = getChk(); s[key] = !s[key]; setChk(s); renderChecklist();
+      });
+      col.appendChild(row);
+    });
+    g.appendChild(col);
+  });
+  const pct = total ? (done/total)*100 : 0;
+  $("#progress-fill").style.width = pct+"%";
+  $("#progress-text").textContent = `${done} of ${total} complete · ${pct.toFixed(0)}%`;
+}
+
+// ---------- CSV export ----------
+function csvEscape(v){ const s = String(v??""); return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; }
+function exportCSV(){
+  const cols = ["name","category","heat","margin","difficulty","cogs","sell","aov","season","audiences","channels","platforms","hook","angle","risks","why"];
+  const rows = [cols.join(",")];
+  D.products.forEach(p => rows.push(cols.map(c => csvEscape(Array.isArray(p[c]) ? p[c].join(";") : p[c])).join(",")));
+  const blob = new Blob([rows.join("\n")], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = el("a",{href:url, download:`dropship-pass-catalog-${new Date().toISOString().slice(0,10)}.csv`});
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1500);
+  toast("CSV downloaded");
+}
+
+// ---------- Product comparison ----------
+const CMP_KEY = "dropship.compare.v1";
+const getCmp = ()=>{ try{return JSON.parse(localStorage.getItem(CMP_KEY)||"[]")}catch(e){return[]} };
+const setCmp = a => localStorage.setItem(CMP_KEY, JSON.stringify(a));
+function toggleCmp(id){
+  const a = getCmp(); const i = a.indexOf(id);
+  if(i>=0) a.splice(i,1);
+  else { if(a.length>=4){ toast("Max 4 products to compare"); return false; } a.push(id); }
+  setCmp(a); return true;
+}
+function openCompare(){
+  const body = $("#compare-body"); body.innerHTML = "";
+  body.appendChild(el("button",{class:"modal-close","data-close":""}, "×"));
+  body.appendChild(el("h2",{}, "⚖ Compare products"));
+  body.appendChild(el("p",{style:"font-size:13px;color:var(--muted);margin-top:4px"}, "Pick up to 4 products to see side-by-side. Saves in your browser."));
+
+  const picker = el("div",{class:"compare-picker"});
+  D.products.forEach(p => {
+    const selected = getCmp().includes(p.id);
+    const c = el("button",{class:`compare-chip ${selected?"active":""}`, onclick:()=>{
+      if(toggleCmp(p.id)!==false) openCompare();
+    }}, `${p.emoji} ${p.name}`);
+    picker.appendChild(c);
+  });
+  body.appendChild(picker);
+
+  const picked = getCmp().map(id => D.products.find(x=>x.id===id)).filter(Boolean);
+  if(!picked.length){
+    body.appendChild(el("div",{class:"compare-empty"}, "Select products above to compare."));
+  } else {
+    const grid = el("div",{class:"compare-grid"});
+    picked.forEach(p => {
+      const col = el("div",{class:"compare-col"},
+        el("h3",{}, el("span",{}, `${p.emoji} ${p.name}`),
+          el("button",{class:"compare-remove", onclick:()=>{ toggleCmp(p.id); openCompare(); }}, "×")),
+        el("div",{class:"c-cat"}, p.category));
+      const row = (k,v)=>el("div",{class:"compare-row"}, el("div",{class:"k"}, k), el("div",{class:"v"}, v));
+      col.appendChild(row("Heat", `${p.heat}/100`));
+      col.appendChild(row("Margin", p.margin));
+      col.appendChild(row("Difficulty", p.difficulty));
+      col.appendChild(row("COGS", p.cogs));
+      col.appendChild(row("Sell", p.sell));
+      col.appendChild(row("AOV", p.aov));
+      col.appendChild(row("Season", p.season));
+      col.appendChild(row("Hook", p.hook));
+      col.appendChild(row("Angle", p.angle));
+      col.appendChild(row("Risks", p.risks));
+      grid.appendChild(col);
+    });
+    body.appendChild(grid);
+  }
+  $("#compare-modal").classList.add("open");
+}
+
 // ---------- live feeds ----------
 const SUBS = ["dropship","ecommerce","Shopify","FulfillmentByAmazon","smallbusiness"];
 async function fetchReddit(){
@@ -591,6 +713,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
   renderScripts();
   renderEmails();
   renderCalendar();
+  renderRegions();
+  renderFaq();
+  renderChecklist();
   wireCalcs();
   PAL_INDEX = buildIndex();
 
@@ -600,6 +725,31 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("#refresh").addEventListener("click", refresh);
   $("#open-search").addEventListener("click", openPalette);
   $("#palette-input").addEventListener("input", e => renderPalette(e.target.value));
+  $("#open-compare")?.addEventListener("click", openCompare);
+  $("#export-csv")?.addEventListener("click", exportCSV);
+
+  const toTop = $("#to-top");
+  window.addEventListener("scroll", ()=>{ toTop.classList.toggle("show", window.scrollY>500); });
+  toTop.addEventListener("click", ()=>window.scrollTo({top:0, behavior:"smooth"}));
+
+  // PWA install prompt
+  let deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e)=>{
+    e.preventDefault(); deferredPrompt = e;
+    if(!localStorage.getItem("dropship.install.dismissed")){
+      $("#install-banner").hidden = false;
+    }
+  });
+  $("#install-btn")?.addEventListener("click", async ()=>{
+    if(!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null; $("#install-banner").hidden = true;
+  });
+  $("#install-dismiss")?.addEventListener("click", ()=>{
+    localStorage.setItem("dropship.install.dismissed", "1");
+    $("#install-banner").hidden = true;
+  });
 
   refresh();
   setInterval(refresh, 20*60*1000);

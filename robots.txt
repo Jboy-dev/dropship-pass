@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jboy-dev.github.io/dropship-pass/sitemap.xml

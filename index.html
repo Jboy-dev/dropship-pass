@@ -5,6 +5,21 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Dropship Pass — Global Product Intelligence</title>
 <meta name="description" content="Live dropshipping intelligence: trending products, where to sell them, how to market them, and who to target." />
+<meta name="theme-color" content="#7c5cff" />
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
+<link rel="apple-touch-icon" href="favicon.svg" />
+<link rel="manifest" href="manifest.json" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Dropship Pass — Global Product Intelligence" />
+<meta property="og:description" content="Live trending products, where to sell them, how to sell them, and who to target. Free, always-on dropshipping research." />
+<meta property="og:url" content="https://jboy-dev.github.io/dropship-pass/" />
+<meta property="og:image" content="https://jboy-dev.github.io/dropship-pass/favicon.svg" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Dropship Pass" />
+<meta name="twitter:description" content="Live dropshipping intelligence: products, platforms, playbooks, calculators." />
+<meta name="twitter:image" content="https://jboy-dev.github.io/dropship-pass/favicon.svg" />
+
 <link rel="stylesheet" href="styles.css" />
 <link rel="preconnect" href="https://www.reddit.com" />
 <link rel="preconnect" href="https://hn.algolia.com" />
@@ -30,6 +45,9 @@
     <a href="#platforms">Platforms</a>
     <a href="#audiences">Audiences</a>
     <a href="#ads">Ads</a>
+    <a href="#regions">Regions</a>
+    <a href="#checklist">Checklist</a>
+    <a href="#faq">FAQ</a>
   </nav>
   <div class="top-actions">
     <button id="open-search" class="search-chip" title="Search (⌘K)">
@@ -104,6 +122,8 @@
         <button class="view-btn active" data-view="grid">Grid</button>
         <button class="view-btn" data-view="heat">By heat</button>
         <button class="view-btn" data-view="saved">★ Saved</button>
+        <button class="view-btn" id="open-compare">⚖ Compare</button>
+        <button class="view-btn" id="export-csv">↓ CSV</button>
       </div>
     </div>
   </div>
@@ -212,6 +232,34 @@
   <div id="emails-grid" class="emails-grid"></div>
 </section>
 
+<section id="regions" class="section">
+  <div class="section-head">
+    <h2>Markets by region</h2>
+    <p>What's hot where, how to pay, and the platform picks for each country.</p>
+  </div>
+  <div id="regions-grid" class="cards-grid"></div>
+</section>
+
+<section id="checklist" class="section">
+  <div class="section-head">
+    <h2>Launch readiness checklist</h2>
+    <p>Check these off before burning ad money. Progress saves in your browser.</p>
+  </div>
+  <div id="checklist-progress" class="progress-wrap">
+    <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+    <div id="progress-text" class="progress-text">0 of 0 done</div>
+  </div>
+  <div id="checklist-grid" class="checklist-grid"></div>
+</section>
+
+<section id="faq" class="section">
+  <div class="section-head">
+    <h2>FAQ</h2>
+    <p>The questions every first-time dropshipper asks — answered straight.</p>
+  </div>
+  <div id="faq-grid" class="faq-grid"></div>
+</section>
+
 <section id="platforms" class="section">
   <div class="section-head">
     <h2>Where to sell</h2>
@@ -287,7 +335,23 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+<button id="to-top" class="to-top" title="Back to top" aria-label="Back to top">↑</button>
+
+<div id="compare-modal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-body modal-wide" id="compare-body"></div>
+</div>
+
+<div id="install-banner" class="install-banner" hidden>
+  <span>📱 Install Dropship Pass for offline access</span>
+  <button id="install-btn" class="btn-primary">Install</button>
+  <button id="install-dismiss" class="btn-ghost">Later</button>
+</div>
+
 <script src="data.js"></script>
 <script src="app.js"></script>
+<script>
+if("serviceWorker" in navigator){ window.addEventListener("load", ()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }
+</script>
 </body>
 </html>

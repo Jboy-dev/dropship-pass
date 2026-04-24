@@ -238,6 +238,76 @@ window.DROPSHIP_DATA = {
     {name:"Judge.me",tag:"Reviews",url:"https://judge.me",why:"Free tier. Drives conversion rate 15–30%."}
   ],
 
+  regions: [
+    {code:"US", name:"United States", flag:"🇺🇸", hot:["Wellness supplements","Home organization","Pet tech","Cold plunges","Personalized gifts"],notes:"Highest AOV, most competition. Q4 drives 40% of revenue. Amazon is unavoidable.",platforms:["Shopify","Amazon","TikTok Shop","Walmart"],channels:["Meta","TikTok","Google"]},
+    {code:"UK", name:"United Kingdom", flag:"🇬🇧", hot:["Skincare","Pet","Home decor","Sustainable products","Gifts"],notes:"TikTok Shop UK is exploding. VAT threshold: £0 for non-UK sellers (must register).",platforms:["Shopify","Amazon UK","TikTok Shop","Etsy"],channels:["Meta","TikTok","Google"]},
+    {code:"CA", name:"Canada", flag:"🇨🇦", hot:["Winter gear","Fitness","Pet","Home & decor","Outdoor"],notes:"US playbook works but with localized shipping. French-language variant helps in QC.",platforms:["Shopify","Amazon CA"],channels:["Meta","Google"]},
+    {code:"AU", name:"Australia", flag:"🇦🇺", hot:["Sun care","Outdoor","Fitness","Pet","Beauty"],notes:"Reversed seasons — December = summer. Smaller market but less competition.",platforms:["Shopify","Amazon AU","Catch"],channels:["Meta","Google"]},
+    {code:"DE", name:"Germany", flag:"🇩🇪", hot:["Home & living","Tools & DIY","Fitness","Baby","Auto"],notes:"GDPR-strict. Consumers value quality + guarantees over novelty. Bank transfer still common.",platforms:["Shopify","Amazon DE","Otto"],channels:["Meta","Google"]},
+    {code:"FR", name:"France", flag:"🇫🇷", hot:["Beauty","Home decor","Fashion accessories","Wellness","Gourmet"],notes:"Needs proper French translation (not MT). Aesthetic + story matter more than deals.",platforms:["Shopify","Amazon FR","Cdiscount"],channels:["Meta","Google"]},
+    {code:"BR", name:"Brazil", flag:"🇧🇷", hot:["Beauty","Fitness","Fashion","Health","Home"],notes:"Payment: Boleto + PIX are critical. Installment plans drive conversion.",platforms:["Shopify","Mercado Livre"],channels:["Meta","TikTok"]},
+    {code:"SG", name:"Singapore / SEA", flag:"🇸🇬", hot:["Beauty","Fashion","Home","Mobile accessories","Snacks"],notes:"TikTok Shop SEA is dominant. Live commerce converts at 5–10× Western rates.",platforms:["Shopee","Lazada","TikTok Shop"],channels:["TikTok","Meta"]}
+  ],
+
+  faq: [
+    {q:"How much money do I need to start?",a:"Realistically $500–1500 to test one product properly: ~$30/mo Shopify, $200–300 for samples + shipping, $500–1000 for ad testing. Under $500 you're organic-only for 3–6 months."},
+    {q:"Is dropshipping still profitable in 2026?",a:"Yes, but the cheap-product-from-AliExpress-with-Shopify-template era is over. What works now: strong brand, unique angle, great creative, and real customer service. Commodity dropshipping is a race to zero."},
+    {q:"What's the fastest path to first sale?",a:"Pick a product you can demo in 5 seconds, film 10 UGC-style videos yourself, post 3x/day on TikTok organically for 30 days. If organic traction, add $20/day Spark ads. Honest timeline: 30–90 days to first sustained sales."},
+    {q:"Should I use AliExpress or a private supplier?",a:"AliExpress for testing (10–20 orders). Once a product is validated, switch to Alibaba with a private supplier — better margins, faster shipping, custom packaging. Never scale past $5K/mo on pure AliExpress."},
+    {q:"What's a healthy margin?",a:"3× markup minimum (COGS + ship = 1/3 of sell price). After ad spend, you want ≥20% net margin. Anything under 2× markup dies when ad costs rise."},
+    {q:"How do I avoid getting my ad account banned?",a:"Never use before/after body photos on Meta. Avoid medical claims. Don't use celebrity names/faces. Warm new accounts slowly. Always have a backup Business Manager ready."},
+    {q:"Do I need an LLC to start?",a:"Not immediately — Shopify accepts sole proprietors. Once you hit ~$2K/mo, form an LLC for liability protection and tax benefits. Legalzoom or Stripe Atlas handles it for ~$200."},
+    {q:"Should I sell one product or many?",a:"Start with one — 'hero product' strategy. Once it's profitable, add 3–5 complementary products to lift AOV. Don't launch a 50-SKU general store as your first store."},
+    {q:"How do I handle returns with a Chinese supplier?",a:"You don't send returns back. Either refund and eat the cost (for low-value items) or have them destroyed by a US 3PL. Bake 10–15% return cost into your margin from day one."},
+    {q:"Shopify vs WooCommerce vs something custom?",a:"Shopify wins for 95% of dropshippers. WooCommerce only if you already run WordPress. Custom is a mistake until you're doing $100K+/month."}
+  ],
+
+  launchChecklist: [
+    {phase:"Product validation", items:[
+      "5-second demo test: can you show its value in 5 seconds of video?",
+      "Google Trends: 5-year trend is stable or rising, not dying",
+      "Meta Ads Library: competitors actively running ads (= market exists)",
+      "3× markup: product costs less than 1/3 of your sell price",
+      "Amazon check: not already dominated by 50 lookalike listings at $8"
+    ]},
+    {phase:"Supplier & fulfillment", items:[
+      "Ordered 3 samples and tested personally",
+      "Supplier communicates in English and responds within 24h",
+      "Shipping time clearly communicated (10–20d = fine if pre-sold)",
+      "Packaging isn't branded with competitor's logo",
+      "Backup supplier identified"
+    ]},
+    {phase:"Store setup", items:[
+      "Shopify with Dawn or Sense theme",
+      "Product page has 5+ images, video, 3+ reviews",
+      "Clear shipping policy page",
+      "Terms + Privacy + Refund policy pages live",
+      "Contact email working (hello@yourbrand.com)",
+      "Pixel + GA4 + TikTok pixel firing (verified)",
+      "Payment: Shopify Payments or Stripe active"
+    ]},
+    {phase:"Marketing prep", items:[
+      "10+ UGC-style video creatives filmed",
+      "Klaviyo welcome + abandoned cart flows live",
+      "Social accounts created (TikTok, IG, Pinterest)",
+      "Influencer seed list of 50+ names built",
+      "First week's content scheduled"
+    ]},
+    {phase:"Launch day", items:[
+      "$50/day test campaign on primary channel",
+      "3+ creative variants per ad set",
+      "Daily checkin at 9am and 9pm",
+      "No judgement before 48 hours",
+      "Customer email inbox monitored"
+    ]},
+    {phase:"Week 2 review", items:[
+      "Any creative hitting ≥2× ROAS?",
+      "Cart abandonment rate under 75%?",
+      "Reviews flowing in from Judge.me?",
+      "Net profit positive after ad spend?"
+    ]}
+  ],
+
   rules: [
     {title:"Don't scrape ad platforms",text:"Meta and Google's ToS prohibit unauthorized scraping. Their free Ads Libraries are legal — use those."},
     {title:"Don't make medical claims",text:"'Cures', 'treats', 'prevents' trigger ad rejection and FTC attention. Use 'supports', 'helps with'."},
